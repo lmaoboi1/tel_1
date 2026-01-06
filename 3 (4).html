@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Prime Packages | Device Allocation</title>
+    
+    <!-- Leaflet CSS for the Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+            min-height: 100vh;
+            touch-action: pan-y;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Premium Card Styling */
+        .scratch-wrapper {
+            background: white;
+            padding: 12px;
+            border-radius: 20px;
+            box-shadow: 
+                0 20px 25px -5px rgba(0, 0, 0, 0.1), 
+                0 8px 10px -6px rgba(0, 0, 0, 0.05),
+                0 0 0 1px rgba(0,0,0,0.02);
+            position: relative;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .scratch-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto;
+            user-select: none;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #f1f5f9;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .grid-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            background: white;
+            z-index: 1;
+        }
+
+        .grid-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #f8fafc;
+            padding: 8px;
+            position: relative;
+        }
+
+        .grid-item img {
+            max-width: 85%;
+            max-height: 85%;
+            object-fit: contain;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .grid-item.winner img {
+            transform: scale(1.15);
+            filter: drop-shadow(0 8px 12px rgba(79, 70, 229, 0.15));
+        }
+
+        .lose-symbol {
+            color: #cbd5e1;
+            opacity: 0.6;
+            transform: scale(0.8);
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='rgba(0,0,0,0.1)' stroke='white' stroke-width='2'/></svg>") 12 12, crosshair;
+            transition: opacity 0.5s ease;
+        }
+
+        /* Dust Particles (Scratch Shavings) */
+        .scratch-dust {
+            position: absolute;
+            background: #94a3b8;
+            pointer-events: none;
+            border-radius: 2px;
+            z-index: 50;
+            animation: floatDown 0.8s ease-out forwards;
+        }
+
+        @keyframes floatDown {
+            0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+            100% { transform: translate(var(--tx), 50px) rotate(var(--tr)); opacity: 0; }
+        }
+
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            animation: fall linear forwards;
+            z-index: 100;
+            border-radius: 2px;
+        }
+
+        @keyframes fall {
+            0% { transform: translateY(-5vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(105vh) rotate(720deg); opacity: 0; }
+        }
+
+        /* Dropping Phone Animation */
+        #droppingPhone {
+            position: fixed;
+            width: 110px;
+            z-index: 999;
+            display: none;
+            filter: drop-shadow(0 25px 35px rgba(0,0,0,0.25));
+            pointer-events: none;
+        }
+
+        @keyframes dropToForm {
+            0% {
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -150%) scale(0.5) rotate(-15deg);
+                opacity: 0;
+            }
+            40% {
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) scale(1.3) rotate(5deg);
+                opacity: 1;
+            }
+            100% {
+                top: var(--target-top); 
+                left: 50%;
+                transform: translate(-50%, 0) scale(1) rotate(0deg);
+                opacity: 1;
+            }
+        }
+
+        .animate-drop {
+            animation: dropToForm 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        /* Truck Animation */
+        @keyframes drive {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(300%); }
+        }
+        
+        .truck-anim {
+            animation: drive 8s linear infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .pulse-marker {
+            animation: pulse-ring 2s infinite;
+        }
+
+        /* Section Visibility */
+        .hidden-section {
+            opacity: 0;
+            max-height: 0;
+            overflow: hidden;
+            transform: translateY(30px);
+            transition: all 1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .visible-section {
+            opacity: 1;
+            max-height: 2500px;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased">
+
+    <!-- Header -->
+    <header class="bg-white/90 backdrop-blur-xl shadow-sm sticky top-0 z-50 border-b border-slate-100">
+        <div class="max-w-4xl mx-auto px-5 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-lg">P</div>
+                <div class="font-bold text-lg tracking-tight text-slate-900">PRIME<span class="text-indigo-600">BUNDLES</span></div>
+            </div>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">Verified</div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-lg mx-auto px-4 py-8 flex flex-col items-center text-center relative overflow-hidden">
+        
+        <div class="mb-8 transition-all duration-500 relative z-10" id="introText">
+            <h1 class="text-3xl md:text-4xl font-extrabold mb-3 text-slate-900 leading-tight tracking-tight">
+                Unlock Your <br><span class="text-indigo-600 bg-indigo-50 px-2 rounded-lg">Exclusive Package</span>
+            </h1>
+            <p class="text-slate-500 text-sm md:text-base max-w-xs mx-auto leading-relaxed">
+                Scratch the surface below. Find 3 identical devices. <strong>Fully reveal all 3 matching phones</strong> to collect.
+            </p>
+        </div>
+
+        <!-- Scratch Card Area -->
+        <div class="scratch-wrapper group" id="cardWrapper">
+            <div class="scratch-container" id="scratchCard">
+                <!-- Underlying Grid (The Prize) -->
+                <div class="grid-layer" id="gridLayer">
+                    <!-- Javascript will populate this -->
+                </div>
+                <!-- Canvas Overlay -->
+                <canvas id="scratchCanvas" width="300" height="300"></canvas>
+            </div>
+            
+            <div class="mt-4 flex items-center justify-center gap-2 text-slate-400">
+                <div class="w-10 h-1 bg-slate-200 rounded-full animate-pulse"></div>
+            </div>
+        </div>
+
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mt-2 animate-bounce">Scratch to Reveal</p>
+
+        <!-- This image will be used for the "Falling" animation -->
+        <img id="droppingPhone" src="" alt="Winning Device">
+
+        <!-- Result Placeholder (Anchor for animation) -->
+        <div id="prizeAnchor" class="w-full h-1 mt-6"></div>
+
+    </main>
+
+    <!-- Claim Form Section -->
+    <section id="claimSection" class="hidden-section bg-white border-t border-slate-100 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.05)] relative z-40 rounded-t-[30px] -mt-4">
+        <div class="max-w-xl mx-auto px-6 pt-16 pb-12 relative">
+            
+            <!-- Floating badge -->
+            <div class="absolute -top-5 left-1/2 transform -translate-x-1/2 bg-emerald-500 text-white px-5 py-2 rounded-full text-sm font-bold shadow-xl shadow-emerald-200 flex items-center gap-2 whitespace-nowrap border-4 border-white">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Allocation Confirmed
+            </div>
+
+            <div class="text-center mb-8">
+                <h2 class="text-xl font-bold text-slate-900">Shipment Details</h2>
+                <p class="text-slate-500 text-sm mt-1 px-4">This specific unit has been reserved. Please verify the destination.</p>
+            </div>
+
+            <form id="shippingForm" class="space-y-5" onsubmit="handleFormSubmit(event)">
+                
+                <div class="bg-slate-50/80 p-5 rounded-2xl border border-slate-100">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="group">
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Recipient (Full Name)</label>
+                            <!-- Name is now editable and empty -->
+                            <input type="text" id="fullName" placeholder="Enter your full name" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-700 font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white shadow-sm text-sm" required>
+                        </div>
+                        <div class="group">
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Phone</label>
+                            <input type="text" id="phone" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-700 font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white shadow-sm text-sm" readonly>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 group">
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Delivery Address</label>
+                        <input type="text" id="address" placeholder="Tap on the map below..." class="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-700 font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-slate-100 shadow-sm text-sm" readonly required>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mt-4">
+                        <div class="group">
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">City</label>
+                            <input type="text" id="city" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-700 font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-slate-100 shadow-sm text-sm" readonly required>
+                        </div>
+                        <div class="group">
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Zip Code</label>
+                            <input type="text" id="zip" class="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-700 font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-slate-100 shadow-sm text-sm" readonly required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Map Section -->
+                <div class="mt-6">
+                    <div class="flex items-center justify-between mb-2 px-1">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Location Verification</label>
+                        <span class="text-[10px] text-indigo-600 font-bold flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded-full animate-pulse">
+                            Tap Map
+                        </span>
+                    </div>
+                    <div class="p-1 bg-white border border-slate-200 rounded-2xl shadow-sm relative group cursor-pointer">
+                        <div id="map" class="h-56 w-full rounded-xl z-0 bg-slate-100"></div>
+                        <!-- Helper tooltip -->
+                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/60 text-white text-xs px-3 py-1 rounded-full pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+                            Tap to select
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary & Action (NO MONEY SIGNS) -->
+                <div class="bg-indigo-900 rounded-2xl p-6 text-white shadow-xl mt-6 transform transition-transform active:scale-[0.99]">
+                    <div class="flex items-center justify-between mb-2 opacity-70 text-sm font-medium">
+                        <span>Standard Bundle</span>
+                        <span class="line-through decoration-red-400 decoration-2">Premium Value</span>
+                    </div>
+                    <div class="flex items-center justify-between mb-6 text-lg font-bold">
+                        <span>Your Status</span>
+                        <span class="text-emerald-300 uppercase tracking-wide">Complimentary</span>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-white text-indigo-900 font-extrabold py-4 rounded-xl shadow-lg hover:bg-indigo-50 transition-colors duration-200 flex items-center justify-center gap-2">
+                        <span>Confirm Shipment</span>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </button>
+                    <p class="text-center text-indigo-300/60 text-[10px] mt-4">One bundle per household. Availability limited.</p>
+                </div>
+
+            </form>
+        </div>
+    </section>
+
+    <!-- Delivery Animation Section (Hidden Initially) -->
+    <section id="deliverySection" class="hidden-section bg-slate-900 fixed inset-0 z-[1000] flex flex-col justify-center items-center">
+        <div class="max-w-xl mx-auto px-6 text-center text-white w-full">
+            
+            <div class="mb-10">
+                <div class="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 pulse-marker">
+                    <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-2">Order Confirmed!</h2>
+                <p class="text-slate-400">Your package is currently in transit.</p>
+            </div>
+
+            <!-- Truck Animation Container -->
+            <div class="relative w-full h-32 bg-slate-800/50 rounded-2xl border border-slate-700 mb-10 overflow-hidden flex items-center">
+                <!-- Road line -->
+                <div class="absolute bottom-4 left-0 w-full h-1 bg-slate-600"></div>
+                <!-- Dashes -->
+                <div class="absolute bottom-4 left-0 w-full h-1" style="background: repeating-linear-gradient(90deg, transparent, transparent 20px, #475569 20px, #475569 40px);"></div>
+                
+                <!-- Moving Truck -->
+                <div class="truck-anim absolute bottom-5 left-0">
+                    <svg class="w-16 h-16 text-indigo-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <p class="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Estimated Arrival</p>
+                <div id="timer" class="text-4xl font-mono font-bold text-emerald-400 tracking-wider">02:00:00</div>
+                <p class="text-xs text-slate-500 mt-3">Courier is en route to your location.</p>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        // --- 1. CONFIGURATION & DATA ---
+        const phoneImages = [
+            "https://i.ibb.co/qLr2yf19/17pro-Lavander-1.png",
+            "https://i.ibb.co/xKWg0R27/17pro-Sage-1.png",
+            "https://i.ibb.co/0y4ZVXQD/17pro-Max-Cosmic-Orange-1.png",
+            "https://i.ibb.co/hRgw1wkq/17pro-Max-Deep-Blue-1.png",
+            "https://i.ibb.co/nM1TBYBQ/17pro-Max-Silver-1.png"
+        ];
+
+        // Address to be filled on map click
+        const fakeLocationData = {
+            address: "123 Main St",
+            city: "New York",
+            zip: "10001",
+            phone: "+1 (555) 012-3456"
+        };
+
+        // --- 2. GLOBAL VARIABLES ---
+        let winningUrl = "";
+        let winningIndices = []; 
+        let mapInstance = null;
+        let mapMarker = null;
+
+        // --- 3. SCRATCH CARD LOGIC ---
+        const canvas = document.getElementById('scratchCanvas');
+        const ctx = canvas.getContext('2d');
+        const gridLayer = document.getElementById('gridLayer');
+        const scratchContainer = document.getElementById('scratchCard');
+        let isDrawing = false;
+        let hasWon = false;
+
+        function initGrid() {
+            winningUrl = phoneImages[Math.floor(Math.random() * phoneImages.length)];
+            
+            let slots = new Array(9).fill(null);
+            winningIndices = [];
+            
+            while(winningIndices.length < 3) {
+                let r = Math.floor(Math.random() * 9);
+                if(winningIndices.indexOf(r) === -1) winningIndices.push(r);
+            }
+
+            slots.forEach((_, index) => {
+                const div = document.createElement('div');
+                div.className = 'grid-item bg-white rounded-lg';
+                
+                if (winningIndices.includes(index)) {
+                    div.classList.add('winner'); 
+                    const img = document.createElement('img');
+                    img.src = winningUrl;
+                    img.alt = "Device";
+                    div.appendChild(img);
+                } else {
+                    const span = document.createElement('span');
+                    span.className = 'lose-symbol';
+                    span.innerHTML = `<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+                    div.appendChild(span);
+                }
+                gridLayer.appendChild(div);
+            });
+        }
+
+        function initCanvas() {
+            const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            gradient.addColorStop(0, '#d1d5db');
+            gradient.addColorStop(0.2, '#f3f4f6');
+            gradient.addColorStop(0.4, '#9ca3af');
+            gradient.addColorStop(0.6, '#e5e7eb');
+            gradient.addColorStop(0.8, '#9ca3af');
+            gradient.addColorStop(1, '#d1d5db');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            for(let i=0; i<1000; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.1)';
+                ctx.beginPath();
+                ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, Math.random() * 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(75, 85, 99, 0.15)';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.translate(canvas.width/2, canvas.height/2);
+            ctx.rotate(-Math.PI/4);
+            ctx.fillText("EXCLUSIVE BUNDLE", 0, 0);
+            ctx.fillText("SCRATCH TO REVEAL", 0, 30);
+            ctx.restore();
+
+            ctx.globalCompositeOperation = 'destination-out';
+        }
+
+        function getMousePos(canvas, evt) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+            
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function createScratchDust(x, y) {
+            for (let i = 0; i < 2; i++) {
+                const dust = document.createElement('div');
+                dust.className = 'scratch-dust';
+                const size = Math.random() * 4 + 2 + 'px';
+                dust.style.width = size;
+                dust.style.height = size;
+                dust.style.left = (x + (Math.random() * 20 - 10)) + 'px';
+                dust.style.top = (y + (Math.random() * 20 - 10)) + 'px';
+                dust.style.setProperty('--tx', (Math.random() * 40 - 20) + 'px');
+                dust.style.setProperty('--tr', (Math.random() * 360) + 'deg');
+                scratchContainer.appendChild(dust);
+                setTimeout(() => dust.remove(), 800);
+            }
+        }
+
+        let lastCheck = 0;
+        
+        function scratch(e) {
+            if (!isDrawing || hasWon) return;
+            e.preventDefault();
+            const pos = getMousePos(canvas, e);
+            
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, 25, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(pos.x + 4, pos.y + 4, 20, 0, Math.PI * 2);
+            ctx.fill();
+
+            createScratchDust(pos.x, pos.y);
+
+            const now = Date.now();
+            if (now - lastCheck > 200) { 
+                checkWinCondition();
+                lastCheck = now;
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => { isDrawing = true; scratch(e); });
+        canvas.addEventListener('touchstart', (e) => { isDrawing = true; scratch(e); }, {passive: false});
+        window.addEventListener('mouseup', () => isDrawing = false);
+        window.addEventListener('touchend', () => isDrawing = false);
+        canvas.addEventListener('mousemove', scratch);
+        canvas.addEventListener('touchmove', scratch, {passive: false});
+
+        function checkWinCondition() {
+            if (hasWon) return;
+
+            const imageData = ctx.getImageData(0, 0, 300, 300);
+            const pixels = imageData.data;
+            const width = 300;
+            const cellSize = 100;
+            
+            let fullyClearedWinners = 0;
+
+            for (let idx of winningIndices) {
+                let col = idx % 3;
+                let row = Math.floor(idx / 3);
+                
+                let startX = col * cellSize;
+                let startY = row * cellSize;
+                
+                let clearedPixels = 0;
+                let totalPixels = 0;
+
+                for (let y = startY; y < startY + cellSize; y += 4) {
+                    for (let x = startX; x < startX + cellSize; x += 4) {
+                        const i = (y * width + x) * 4;
+                        if (pixels[i + 3] < 128) { 
+                            clearedPixels++;
+                        }
+                        totalPixels++;
+                    }
+                }
+
+                if ((clearedPixels / totalPixels) > 0.70) {
+                    fullyClearedWinners++;
+                }
+            }
+
+            if (fullyClearedWinners === 3) {
+                triggerWin();
+            }
+        }
+
+        function triggerWin() {
+            hasWon = true;
+            canvas.style.transition = "opacity 0.8s ease-out";
+            canvas.style.opacity = "0";
+            createConfetti();
+            setTimeout(() => {
+                performDropAnimation();
+            }, 600);
+        }
+
+        function performDropAnimation() {
+            const phoneImg = document.getElementById('droppingPhone');
+            const targetAnchor = document.getElementById('prizeAnchor');
+            const anchorRect = targetAnchor.getBoundingClientRect();
+            const endTop = anchorRect.top + 40; 
+            
+            document.documentElement.style.setProperty('--target-top', endTop + 'px');
+
+            phoneImg.src = winningUrl;
+            phoneImg.style.display = 'block';
+            
+            void phoneImg.offsetWidth; 
+            phoneImg.classList.add('animate-drop');
+
+            let isRevealed = false;
+            const finishReveal = () => {
+                if (isRevealed) return;
+                isRevealed = true;
+                revealForm();
+            };
+
+            phoneImg.addEventListener('animationend', finishReveal);
+            setTimeout(finishReveal, 1800);
+        }
+
+        function revealForm() {
+            const claimSection = document.getElementById('claimSection');
+            claimSection.classList.remove('hidden-section');
+            claimSection.classList.add('visible-section');
+            
+            // Name is NOT filled (user must enter it)
+            // Address is NOT filled (user must click map)
+            
+            // Fill phone only
+            document.getElementById('phone').value = fakeLocationData.phone;
+
+            initMap();
+            
+            setTimeout(() => {
+                claimSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+        }
+
+        function createConfetti() {
+            const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899'];
+            for (let i = 0; i < 150; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+                confetti.style.width = (Math.random() * 8 + 4) + 'px';
+                confetti.style.height = confetti.style.width;
+                const duration = Math.random() * 2 + 3;
+                confetti.style.animationDuration = duration + 's';
+                confetti.style.animationDelay = (Math.random() * 0.5) + 's';
+                document.body.appendChild(confetti);
+                setTimeout(() => confetti.remove(), duration * 1000);
+            }
+        }
+
+        // --- 5. MAP LOGIC (INTERACTIVE) ---
+        function initMap() {
+            if (mapInstance) {
+                mapInstance.invalidateSize();
+                return;
+            }
+            
+            // Initial view (NY coords for demo)
+            const startLat = 40.7128;
+            const startLng = -74.0060;
+
+            mapInstance = L.map('map', {
+                zoomControl: true,
+                dragging: true,
+                scrollWheelZoom: true,
+                touchZoom: true
+            }).setView([startLat, startLng], 12);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: ''
+            }).addTo(mapInstance);
+
+            const customIcon = L.divIcon({
+                className: 'custom-pin',
+                html: `<div style="background-color:#4f46e5; width:20px; height:20px; border-radius:50%; border:3px solid white; box-shadow:0 4px 6px rgba(0,0,0,0.2);"></div>`,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+
+            // Handle Map Clicks
+            mapInstance.on('click', function(e) {
+                const { lat, lng } = e.latlng;
+                
+                // 1. Move/Create Marker
+                if (mapMarker) {
+                    mapMarker.setLatLng([lat, lng]);
+                } else {
+                    mapMarker = L.marker([lat, lng], {icon: customIcon}).addTo(mapInstance);
+                }
+
+                // 2. Fill Address Form
+                fillAddressFromMap();
+            });
+            
+            setTimeout(() => mapInstance.invalidateSize(), 500);
+        }
+
+        function fillAddressFromMap() {
+            // Simulate filling address after click
+            const addrInput = document.getElementById('address');
+            const cityInput = document.getElementById('city');
+            const zipInput = document.getElementById('zip');
+
+            // Add highlight effect to show it updated
+            [addrInput, cityInput, zipInput].forEach(el => {
+                el.style.backgroundColor = "#ecfdf5"; // light green
+                el.style.borderColor = "#10b981";
+                setTimeout(() => {
+                    el.style.backgroundColor = ""; // reset
+                    el.style.borderColor = "";
+                }, 1000);
+            });
+
+            addrInput.value = fakeLocationData.address;
+            cityInput.value = fakeLocationData.city;
+            zipInput.value = fakeLocationData.zip;
+        }
+
+        // --- 6. SUBMIT & DELIVERY LOGIC ---
+        function handleFormSubmit(e) {
+            e.preventDefault();
+
+            // Validate inputs
+            const name = document.getElementById('fullName').value;
+            const address = document.getElementById('address').value;
+
+            if(!name) {
+                alert("Please enter your full name.");
+                return;
+            }
+            if(!address) {
+                alert("Please select a delivery address on the map.");
+                return;
+            }
+            
+            const claimSection = document.getElementById('claimSection');
+            const deliverySection = document.getElementById('deliverySection');
+
+            // 1. Hide Form
+            claimSection.classList.remove('visible-section');
+            claimSection.classList.add('hidden-section');
+            
+            // 2. Show Delivery Section
+            setTimeout(() => {
+                claimSection.style.display = 'none'; // fully remove layout
+                
+                // HIDE THE PHONE
+                document.getElementById('droppingPhone').style.display = 'none';
+
+                deliverySection.classList.remove('hidden-section');
+                deliverySection.classList.add('visible-section');
+                
+                startDeliveryTimer();
+            }, 800);
+        }
+
+        function startDeliveryTimer() {
+            let duration = 2 * 60 * 60; // 2 hours
+            const timerElement = document.getElementById('timer');
+
+            const updateTimer = () => {
+                const hours = Math.floor(duration / 3600);
+                const minutes = Math.floor((duration % 3600) / 60);
+                const seconds = duration % 60;
+
+                const formatted = 
+                    `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                
+                timerElement.textContent = formatted;
+
+                if (duration > 0) {
+                    duration--;
+                }
+            };
+
+            updateTimer(); 
+            setInterval(updateTimer, 1000);
+        }
+
+        // Run Init
+        initGrid();
+        initCanvas();
+
+    </script>
+</body>
+</html>
